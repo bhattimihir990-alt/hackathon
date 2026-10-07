@@ -1,0 +1,194 @@
+{% extends "staff/base_staff.html" %}
+
+{% block title %}Counter Dashboard | QueueLess Staff{% endblock %}
+
+{% block content %}
+<!-- Top Info Bar -->
+<div class="card border-0 shadow-sm mb-4">
+    <div class="card-body p-3 bg-white rounded">
+        <div class="row align-items-center text-center text-md-start">
+            <div class="col-md-3 mb-2 mb-md-0 border-end-md">
+                <span class="text-muted small">Assigned Office:</span>
+                <div class="fw-bold text-dark">{{ staff_info.office_name }}</div>
+            </div>
+            <div class="col-md-3 mb-2 mb-md-0 border-end-md">
+                <span class="text-muted small">Department:</span>
+                <div class="fw-bold text-dark">{{ staff_info.department_name }}</div>
+            </div>
+            <div class="col-md-3 mb-2 mb-md-0 border-end-md">
+                <span class="text-muted small">Counter Number:</span>
+                <div class="fw-bold text-primary fs-5">{{ staff_info.counter_number or 'Unassigned' }}</div>
+            </div>
+            <div class="col-md-3">
+                <span class="text-muted small">Operator:</span>
+                <div class="fw-bold text-dark">{{ staff_info.name }}</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-4 mb-4">
+    <!-- Current Token Card -->
+    <div class="col-lg-7">
+        <div class="card border-primary border-2 shadow-sm h-100">
+            <div class="card-header bg-primary text-white d-flex justify-content-between align-items-center py-3">
+                <h5 class="mb-0 fw-bold"><i class="bi bi-person-fill-check me-2"></i> Current Counter Token</h5>
+                {% if current_token %}
+                    <span class="badge bg-light text-primary text-uppercase fs-6">{{ current_token.status }}</span>
+                {% else %}
+                    <span class="badge bg-light text-dark fs-6">IDLE</span>
+                {% endif %}
+            </div>
+            <div class="card-body p-4">
+                {% if current_token %}
+                    <div class="row align-items-center">
+                        <div class="col-md-6 text-center border-end-md py-2">
+                            <div class="text-muted small text-uppercase fw-bold">Active Token</div>
+                            <div class="token-display-large text-primary my-1">{{ current_token.token_number }}</div>
+                            <div class="small text-muted">Issued Today: {{ current_token.token_date }}</div>
+                        </div>
+                        <div class="col-md-6 ps-md-4 py-2">
+                            <h4 class="fw-bold text-dark mb-2">{{ current_token.user_name }}</h4>
+                            <div class="mb-2">
+                                <span class="badge bg-primary bg-opacity-10 text-primary fs-6">{{ current_token.service_name }}</span>
+                            </div>
+                            <div class="text-muted small mb-1">
+                                <i class="bi bi-building me-1"></i> {{ current_token.office_name }}
+                            </div>
+                            <div class="text-muted small mb-3">
+                                <i class="bi bi-clock me-1"></i> Called: {{ current_token.called_at or 'Just now' }}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Action Controls for Active Token -->
+                    <div class="border-top pt-3 mt-3">
+                        <div class="d-flex flex-wrap gap-2 justify-content-center">
+                            {% if current_token.status == 'called' %}
+                            <form method="POST" action="{{ url_for('staff.serve_token') }}">
+                                <input type="hidden" name="token_id" value="{{ current_token.id }}">
+                                <button type="submit" class="btn btn-success btn-lg px-4 fw-bold">
+                                    <i class="bi bi-play-fill me-1"></i> START SERVING
+                                </button>
+                            </form>
+                            <form method="POST" action="{{ url_for('staff.recall_token') }}">
+                                <input type="hidden" name="token_id" value="{{ current_token.id }}">
+                                <button type="submit" class="btn btn-info btn-lg px-3 fw-bold text-white">
+                                    <i class="bi bi-bell-fill me-1"></i> RECALL
+                                </button>
+                            </form>
+                            {% elif current_token.status == 'serving' %}
+                            <form method="POST" action="{{ url_for('staff.complete_token') }}">
+                                <input type="hidden" name="token_id" value="{{ current_token.id }}">
+                                <button type="submit" class="btn btn-success btn-lg px-4 fw-bold">
+                                    <i class="bi bi-check-circle-fill me-1"></i> COMPLETE
+                                </button>
+                            </form>
+                            {% endif %}
+
+                            <form method="POST" action="{{ url_for('staff.skip_token') }}" onsubmit="return confirm('Mark this token as No-Show / Skip?');">
+                                <input type="hidden" name="token_id" value="{{ current_token.id }}">
+                                <button type="submit" class="btn btn-warning btn-lg px-3 fw-bold text-dark">
+                                    <i class="bi bi-skip-forward-fill me-1"></i> SKIP (NO-SHOW)
+                                </button>
+                            </form>
+                        </div>
+                    </div>
+                {% else %}
+                    <div class="text-center py-4">
+                        <i class="bi bi-cup-hot text-muted display-4"></i>
+                        <h4 class="mt-3 fw-bold text-secondary">No Token Currently Active</h4>
+                        <p class="text-muted">Click <strong>[ NEXT TOKEN ]</strong> below to call the next citizen in line.</p>
+
+                        <form method="POST" action="{{ url_for('staff.call_next') }}" class="mt-4">
+                            <button type="submit" class="btn btn-primary btn-lg px-5 py-3 fw-bold fs-4 shadow" {% if not next_token %}disabled{% endif %}>
+                                <i class="bi bi-megaphone-fill me-2"></i> NEXT TOKEN
+                            </button>
+                        </form>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <!-- Next Token & Queue Stats Card -->
+    <div class="col-lg-5">
+        <div class="card border-0 shadow-sm mb-4">
+            <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-3">
+                <span><i class="bi bi-person-lines-fill me-2 text-primary"></i> Next Token Preview</span>
+                <span class="badge bg-warning text-dark">{{ waiting_queue|length }} Waiting</span>
+            </div>
+            <div class="card-body p-4 text-center">
+                {% if next_token %}
+                    <div class="text-muted small text-uppercase fw-bold">Up Next</div>
+                    <div class="token-display-next text-warning my-1">{{ next_token.token_number }}</div>
+                    <h5 class="fw-bold text-dark mb-1">{{ next_token.user_name }}</h5>
+                    <span class="badge bg-light text-dark border mb-3">{{ next_token.service_name }}</span>
+
+                    <form method="POST" action="{{ url_for('staff.call_next') }}">
+                        <button type="submit" class="btn btn-primary w-100 btn-lg fw-bold">
+                            <i class="bi bi-megaphone-fill me-2"></i> CALL NEXT TOKEN NOW
+                        </button>
+                    </form>
+                {% else %}
+                    <div class="py-3">
+                        <i class="bi bi-check-all text-success display-4"></i>
+                        <h5 class="fw-bold text-dark mt-2">Queue is Empty</h5>
+                        <p class="text-muted small">There are no citizens currently waiting in line for {{ staff_info.department_name }}.</p>
+                    </div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="card border-0 shadow-sm bg-dark text-white">
+            <div class="card-body p-4">
+                <h6 class="fw-bold text-uppercase text-muted mb-2">Counter Operator Quick Guide</h6>
+                <ul class="ps-3 mb-0 small">
+                    <li class="mb-1">Click <strong>NEXT TOKEN</strong> to call the first citizen in line.</li>
+                    <li class="mb-1">Click <strong>START SERVING</strong> when the citizen arrives at your counter.</li>
+                    <li class="mb-1">Click <strong>COMPLETE</strong> once the service transaction is finished.</li>
+                    <li class="mb-1">Click <strong>SKIP</strong> if citizen fails to show up.</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Today's Queue List Table -->
+<div class="card border-0 shadow-sm">
+    <div class="card-header bg-white fw-bold d-flex justify-content-between align-items-center py-3">
+        <span><i class="bi bi-list-check me-2 text-primary"></i> Today's Waiting Citizens ({{ waiting_queue|length }})</span>
+        <a href="{{ url_for('staff.queue') }}" class="btn btn-outline-secondary btn-sm">View Full Roster &rarr;</a>
+    </div>
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>Position</th>
+                    <th>Token #</th>
+                    <th>Citizen Name</th>
+                    <th>Service Required</th>
+                    <th>Date / Time</th>
+                    <th>Status</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for item in waiting_queue %}
+                <tr>
+                    <td class="fw-bold text-muted">#{{ loop.index }}</td>
+                    <td class="fw-bold text-primary fs-5">{{ item.token_number }}</td>
+                    <td class="fw-semibold">{{ item.user_name }}</td>
+                    <td>{{ item.service_name }}</td>
+                    <td class="small text-muted">{{ item.token_date }}</td>
+                    <td><span class="badge bg-warning text-dark text-uppercase">Waiting</span></td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="6" class="text-center text-muted py-4">No waiting tokens in line today.</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}
